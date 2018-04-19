@@ -19,7 +19,7 @@ int main(void)
 
 	int i, j;
 
-	csInit(); // Initialize chip select PC03
+	csInit(); // Initialize chip select pin PC03
 	spiInit(SPI2);
 
 	for (i = 0; i < 8; i++) {
@@ -44,19 +44,20 @@ int main(void)
 				assert_failed (__FILE__, __LINE__);
 	}
 
-	return 0;
+	return 0
 }
 
 /* initialise PC3 as output for SPI CS*/
 void csInit(void)
 {
-	GPIO_InitTypeDef GPIO_InitStructure;
+	// Clock
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOC, ENABLE);
+	// GPIO
+	GPIO_InitTypeDef GPIO_InitStructure;
 	GPIO_StructInit(&GPIO_InitStructure);
-	// SCK and MOSI are AF_PP
 	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;
 	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
-	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_InitStructure.GPIO_Spe1ed = GPIO_Speed_50MHz;
 	GPIO_Init(GPIOC, &GPIO_InitStructure);
 }
 

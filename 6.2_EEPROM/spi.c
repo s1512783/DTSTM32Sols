@@ -10,7 +10,7 @@ static const uint16_t speeds [] = {
 		[SPI_MEDIUM] = SPI_BaudRatePrescaler_8,
 		[SPI_FAST] = SPI_BaudRatePrescaler_2};
 
-void spiInit (SPI_TypeDef *SPIx)
+void spiInit(SPI_TypeDef *SPIx)
 {
 	SPI_InitTypeDef SPI_InitStructure;
 	GPIO_InitTypeDef GPIO_InitStructure;
@@ -44,7 +44,7 @@ void spiInit (SPI_TypeDef *SPIx)
 	SPI_InitStructure.SPI_NSS = SPI_NSS_Soft;
 	SPI_InitStructure.SPI_BaudRatePrescaler = speeds[SPI_SLOW];
 	SPI_InitStructure.SPI_CRCPolynomial = 7;
-	SPI_Init (SPIx, &SPI_InitStructure);
+	SPI_Init(SPIx, &SPI_InitStructure);
 
 	SPI_Cmd(SPIx, ENABLE);
 }
