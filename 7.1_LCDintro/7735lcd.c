@@ -13,6 +13,7 @@
 #define GPIO_PIN_SCE GPIO_Pin_0 // on port GPIOC
 #define GPIO_PIN_BKL GPIO_Pin_1 // on port GPIOA
 #define SPILCD SPI2
+#define LCDSPEED SPI_FAST
 
 // LCD control
 #define LOW 0
@@ -25,7 +26,11 @@
 #define ST7735_RAMWR 0x2C
 #define ST7735_RAMRD 0x2E
 #define ST7735_COLMOD 0x3A
-#define MADVAL(x) (((x) << 5) | 8)
+
+// the book or's MADVAL with 0x08, which inverts the color order in my display
+//(I think it depends on the version of 7735 you have)
+
+#define MADVAL(x) (((x) << 5))
 
 struct ST7735_cmdBuf
 {
@@ -68,7 +73,7 @@ static const struct ST7735_cmdBuf initializers[] = {
 		/* CHECK DISPLAY MODEL (REG/GREEN/BLACK)*/
 
 		// Color mode 16 bit (10.1.30)
-		{ST7735_COLMOD, 0, 1, {0x05}},
+		{ST7735_COLMOD, 10, 1, {0x05}},
 		// Column address set 0..127
 		{ST7735_CASET, 0, 4, {0x00, 0x00, 0x00, 0x7F}},
 		// Row address set 0..159
@@ -76,7 +81,7 @@ static const struct ST7735_cmdBuf initializers[] = {
 		// GMCTRP1 Gamma correction
 		{0xE0, 0, 16, {0x02, 0x1C, 0x07, 0x12, 0x37, 0x32, 0x29, 0x2D,
 		0x29, 0x25, 0x2B, 0x39, 0x00, 0x01, 0x03, 0x10}},
-		// GMCTRP2 Gamma Polarity corrction
+		// GMCTRP2 Gamma Polarity correction
 		{0xE1, 0, 16, {0x03, 0x1d, 0x07, 0x06, 0x2E, 0x2C, 0x29, 0x2D,
 		0x2E, 0x2E, 0x37, 0x3F, 0x00, 0x00, 0x02, 0x10}},
 
@@ -91,10 +96,54 @@ static const struct ST7735_cmdBuf initializers[] = {
 };
 
 
+// low level routines
+/* LcdWrite - send 8-bit data to LCD over SPI*/
+static void LcdWrite(char dc, const char *data, int cnt)
+{
+	GPIO_WriteBit(LCD_PORT, GPIO_PIN_DC, dc); // we use the DC pin to distinguish between data and control sequences
+	GPIO_ResetBits(LCD_PORT, GPIO_PIN_SCE); // select LCD on SPI by pulling its pin low
+	spiReadWrite(SPILCD, 0, data, cnt, LCDSPEED); // send SPI data
+	GPIO_SetBits(LCD_PORT, GPIO_PIN_SCE); // disassert LCD on SPI
+}
+
+/* LcdWrite - send 16-bit data to LCD over SPI*/
+static void LcdWrite16(char dc, const uint16_t *data, int cnt)
+{
+	GPIO_WriteBit(LCD_PORT, GPIO_PIN_DC, dc);
+	GPIO_ResetBits(LCD_PORT, GPIO_PIN_SCE);
+	spiReadWrite16(SPILCD, 0, data, cnt, LCDSPEED);
+	GPIO_SetBits(LCD_PORT, GPIO_PIN_SCE);
+}
+
+/* ST7735_writeCmd - send a command to the ST7735 chip*/
+static void ST7735_writeCmd(uint8_t c)
+{
+	LcdWrite(LCD_C, &c, 1);
+}
+
+/* Delay timer codet */
+static __IO uint32_t TimingDelay;
+
+void Delay(uint32_t nTime)
+{
+	TimingDelay = nTime;
+	while (TimingDelay != 0);
+}
+
+void SysTick_Handler(void)
+{
+	if (TimingDelay != 0x00)
+		TimingDelay --;
+}
+
+
 /*  ST7735_init - initialise the LCD and SPI stuff */
 void ST7735_init()
 {
 	const struct ST7735_cmdBuf *cmd;
+
+	if (SysTick_Config(SystemCoreClock/1000))
+		while (1);
 
 	/* Set up pins */
 	// enable clock to GPIO
@@ -128,78 +177,52 @@ void ST7735_init()
 	// Send initialization commands to ST7735
 	for (cmd = initializers; cmd->command; cmd ++){
 		LcdWrite(LCD_C, &(cmd->command), 1); // why are they dereferencing the pointer and then referencing it again?
-	if (cmd->len)
-		LcdWrite(LCD_D, cmd->data , cmd->len);
-	if (cmd->delay)
-		Delay(cmd->delay)
+		if (cmd->len)
+			LcdWrite(LCD_D, cmd->data , cmd->len);
+		if (cmd->delay)
+			Delay(cmd->delay);
 	}
 }
 
 
-		// low level routines
-		/* LcdWrite - send 8-bit data to LCD over SPI*/
-		static void LcdWrite(char dc, const char *data, int cnt)
-	{
-		GPIO_WriteBit(LCD_PORT, GPIO_PIN_DC, dc); // we use the DC pin to distinguish between data and control sequences
-		GPIO_ResetBits(LCD_PORT, GPIO_PIN_SCE); // select LCD on SPI by pulling its pin low
-		spiReadWrite(SPILCD, 0, data, cnt, LCDSPEED); // send SPI data
-		GPIO_SetBits(LCD_PORT, GPIO_PIN_SCE); // disassert LCD on SPI
+static uint8_t madctlcurrent = MADVAL(MADCTLGRAPHICS); // for storing current control sequence
+
+/* ST7735_setAddrWindow - send window in which we'll be drawing pixels */
+void ST7735_setAddrWindow(uint16_t x0, uint16_t y0,
+		uint16_t x1, uint16_t y1, uint8_t madctl)
+{
+	madctl = MADVAL(madctl);
+	if (madctl != madctlcurrent){
+		ST7735_writeCmd(ST7735_MADCTL);
+		LcdWrite(LCD_D, &madctl, 1);
+		madctlcurrent = madctl;
 	}
 
-	/* LcdWrite - send 16-bit data to LCD over SPI*/
-	static void LcdWrite16(char dc, const uint16_t *data, int cnt)
-	{
-		GPIO_WriteBit(LCD_PORT, GPIO_PIN_DC, dc);
-		GPIO_ResetBits(LCD_PORT, GPIO_PIN_SCE);
-		spiReadWrite16(SPILCD, 0, data, cnt, LCDSPEED);
-		GPIO_SetBits(LCD_PORT, GPIO_PIN_SCE);
-	}
+	// set column boundaries
+	ST7735_writeCmd(ST7735_CASET);
+	LcdWrite16(LCD_D, &x0, 1);
+	LcdWrite16(LCD_D, &x1, 1);
 
-	/* ST7735_writeCmd - send a command to the ST7735 chip*/
-	static void ST7735_writeCmd(uint8_t c)
-	{
-		LcdWrite(LCD_C, &c, 1);
-	}
+	// set row boundaries
+	ST7735_writeCmd(ST7735_RASET);
+	LcdWrite16(LCD_D, &y0, 1);
+	LcdWrite16(LCD_D, &y1, 1);
 
+	// send write command to start writing
+	ST7735_writeCmd(ST7735_RAMWR);
+}
 
-	static uint8_t madctlcurrent = MADVAL(MADCTLGRAPHICS); // for storing current control sequence
+/* ST7735_pushColor - write pixel color data to LCD RAM */
+void ST7735_pushColor(uint16_t *color, int cnt)
+{
+	LcdWrite16(LCD_D, color, cnt);
+}
 
-	/* ST7735_setAddrWindow - send window in which we'll be drawing pixels */
-	void ST7735_setAddrWindow(uint16_t x0, uint16_t y0,
-			uint16_t x1, uint16_t y1, uint8_t madctl)
-	{
-		madctl = MADVAL(madctl);
-		if (madctl != madctlcurrent){
-			ST7735_writeCmd(ST7735_MADCTL);
-			LcdWrite(LCD_D, &madctl, 1);
-			madctlcurrent = madctl;
-		}
-
-		// set column boundaries
-		ST7735_writeCmd(ST7735_CASET);
-		LcdWrite16(LCD_D, &x0, 1);
-		LcdWrite16(LCD_D, &x1, 1);
-
-		// set row boundaries
-		ST7735_writeCmd(ST7735_RASET);
-		LcdWrite16(LCD_D, &y0, 1);
-		LcdWrite16(LCD_D, &y1, 1);
-
-		// send write command to start writing
-		ST7735_writeCmd(ST7735_RAMWR);
-	}
-
-	/* ST7735_pushColor - write pixel color data to LCD RAM */
-	void ST7735_pushColor(uint16_t *color, int cnt)
-	{
-		LcdWrite16(LCD_D, color, cnt);
-	}
-
-	/* ST7735_backLight - turn LCD backlight on and off */
-	void ST7735_backLight (uint8_t on)
-	{
-		if(on)
-			GPIO_WriteBit(LCD_PORT_BKL, GPIO_PIN_BKL, HIGH);
-		else
-			GPIO_WriteBit (LCD_PORT_BKL, GPIO_PIN_BKL, LOW);
-	}
+/* ST7735_backLight - turn LCD backlight on and off */
+void ST7735_backLight(uint8_t on)
+{
+	if(on)
+		GPIO_WriteBit(LCD_PORT_BKL, GPIO_PIN_BKL, HIGH);
+	else
+		GPIO_WriteBit (LCD_PORT_BKL, GPIO_PIN_BKL, LOW);
+}

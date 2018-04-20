@@ -15,8 +15,16 @@ void fillScreen(uint16_t color);
 int main(void)
 {
 	ST7735_init();
+	ST7735_backLight(1);
 
-	fillScreen(0xF800);
+	while(1){
+	fillScreen(ST7735_RED);
+	Delay(500);
+	fillScreen(ST7735_GREEN);
+	Delay(500);
+	fillScreen(ST7735_BLUE);
+	Delay(500);
+	}
 
 	return 0;
 }
