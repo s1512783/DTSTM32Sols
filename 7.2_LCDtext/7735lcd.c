@@ -219,6 +219,18 @@ void ST7735_pushColor(uint16_t *color, int cnt)
 	LcdWrite16(LCD_D, color, cnt);
 }
 
+void ST7735_fillRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color)
+{
+	uint8_t x,y;
+	ST7735_setAddrWindow(x0, y0, x1 - 1, y1 - 1, MADCTLGRAPHICS);
+	for (x=x0; x < x1; x++) {
+		for (y=y0; y < y1; y++) {
+			ST7735_pushColor(&color, 1);
+		}
+	}
+}
+
+
 /* ST7735_drawChar - draws character C from ASCII bmp font defined in font.h */
 void ST7735_drawChar(uint16_t x0, uint16_t y0,
 		unsigned char c, uint16_t textColor, uint16_t bgColor)
@@ -233,25 +245,122 @@ void ST7735_drawChar(uint16_t x0, uint16_t y0,
 
 		uint8_t line = font[5*c + i]; // get line from font
 
-
-		//draw letter
+		//draw letter and single line spacing
 		for (j=0; j < 8; j++, line >>= 1){
-			if(line & 0x01)
+			if (line & 0x01)
 				ST7735_pushColor(&textColor, 1);
 			else
 				ST7735_pushColor(&bgColor, 1);
 		}
 
+		// draw line spacing
 		ST7735_pushColor(&bgColor, 2);
-
-
-
 	}
 
-	ST7735_pushColor(&bgColor, 10);
-
+	// draw character spacing
+	// ST7735_pushColor(&bgColor, 10); -- can't do this
+	// For some reason it gives erratic errors in the vertical line (random pixels turned on)
+	for (j = 0; j<10; j++)
+		ST7735_pushColor(&bgColor, 1);
 }
 
+
+/* ST7735_printStringRect - print as much of str as will fit in rectangle defined by x0, y0, x1, y1.
+ * Return number of chars printed
+ */
+uint8_t ST7735_printStringRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
+		unsigned char *str, uint16_t textColor, uint16_t bgColor)
+{
+	uint8_t i, j, lineLen, noLines, noWritten, endString;
+
+	// calculate drawing space
+	lineLen = (x1 - x0) / CHARWIDTH;
+	noLines = (y1 - y0) / CHARHEIGHT;
+	endString = 0;
+
+	for (i = 0; i < noLines; i++){
+		if (!endString){
+			for (j = 0; j < lineLen; j++) {
+				if (*str == '\n'){ // skip line if newline
+					str++;
+					break;
+				}
+				if (*str == '\0') { // stop printing chars if end of string
+					endString = 1;
+					break;
+				}
+				ST7735_drawChar(x0 + j*CHARWIDTH, y0 + i*CHARHEIGHT, *str++, textColor, bgColor);
+				noWritten++;
+			}
+		}
+		else
+			break;
+	}
+
+
+	return noWritten;
+}
+
+void ST7735_drawVertLine(uint16_t x0, uint16_t y0,
+		uint8_t length, uint8_t thickness,  uint16_t lineColor)
+{
+	ST7735_fillRect(x0, y0, x0 + thickness, y0 + length, lineColor);
+}
+
+void ST7735_drawHorizLine(uint16_t x0, uint16_t y0,
+		uint8_t length, uint8_t thickness,  uint16_t lineColor)
+{
+	ST7735_fillRect(x0, y0, x0 + length, y0 + thickness, lineColor);
+}
+
+void ST7735_drawRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
+		uint8_t thickness,  uint16_t lineColor)
+{
+	ST7735_drawVertLine(x0, y0, y1 - y0, thickness, lineColor);
+	ST7735_drawHorizLine(x0 + thickness, y1 - thickness, x1 - x0 - thickness, thickness, lineColor);
+	ST7735_drawHorizLine(x0 + thickness, y0, x1 - x0 - thickness, thickness, lineColor);
+	ST7735_drawVertLine(x1 - thickness, y0 + thickness, y1 - y0 - 2 * thickness, thickness, lineColor);
+}
+
+void ST7735_drawPixel(uint16_t x0, uint16_t y0, uint16_t color)
+{
+	ST7735_setAddrWindow(x0, y0, x0+1, y0+1, MADCTLGRAPHICS);
+	ST7735_pushColor(&color, 1);
+}
+
+void ST7735_drawCircle(uint16_t x0, uint16_t y0, uint16_t r, uint16_t color)
+{
+	int16_t f = 1 - r;
+	int16_t ddF_x = 1;
+	int16_t ddF_y = -2 * r;
+	int16_t x = 0;
+	int16_t y = r;
+
+	ST7735_drawPixel(x0  , y0+r, color);
+	ST7735_drawPixel(x0  , y0-r, color);
+	ST7735_drawPixel(x0+r, y0  , color);
+	ST7735_drawPixel(x0-r, y0  , color);
+
+	while (x<y) {
+		if (f >= 0) {
+			y--;
+			ddF_y += 2;
+			f += ddF_y;
+		}
+		x++;
+		ddF_x += 2;
+		f += ddF_x;
+
+		ST7735_drawPixel(x0 + x, y0 + y, color);
+		ST7735_drawPixel(x0 - x, y0 + y, color);
+		ST7735_drawPixel(x0 + x, y0 - y, color);
+		ST7735_drawPixel(x0 - x, y0 - y, color);
+		ST7735_drawPixel(x0 + y, y0 + x, color);
+		ST7735_drawPixel(x0 - y, y0 + x, color);
+		ST7735_drawPixel(x0 + y, y0 - x, color);
+		ST7735_drawPixel(x0 - y, y0 - x, color);
+	}
+}
 
 
 /* ST7735_backLight - turn LCD backlight on and off */
@@ -260,5 +369,5 @@ void ST7735_backLight(uint8_t on)
 	if(on)
 		GPIO_WriteBit(LCD_PORT_BKL, GPIO_PIN_BKL, HIGH);
 	else
-		GPIO_WriteBit (LCD_PORT_BKL, GPIO_PIN_BKL, LOW);
+		GPIO_WriteBit(LCD_PORT_BKL, GPIO_PIN_BKL, LOW);
 }
