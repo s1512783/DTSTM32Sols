@@ -17,12 +17,12 @@ int main(void)
 	ST7735_init();
 	ST7735_backLight(1);
 
-	fillScreen(ST7735_BLACK);
+	fillScreen(ST7735_BLUE);
 
-	ST7735_drawChar(10, 10, '0', ST7735_WHITE, ST7735_BLACK);
-	ST7735_drawChar(ST7735_width-10, 10, '1', ST7735_WHITE, ST7735_BLACK);
-	ST7735_drawChar(ST7735_width-10, ST7735_height-10, '2', ST7735_WHITE, ST7735_BLACK);
-	ST7735_drawChar(10, ST7735_height-10, '3', ST7735_WHITE, ST7735_BLACK);
+	ST7735_drawChar(0, 0, 'A', ST7735_WHITE, ST7735_BLACK);
+	ST7735_drawChar(ST7735_width-6, 0, 'B', ST7735_WHITE, ST7735_BLACK);
+	ST7735_drawChar(ST7735_width-6, ST7735_height-10, 'C', ST7735_WHITE, ST7735_BLACK);
+	ST7735_drawChar(0, ST7735_height-10, 'D', ST7735_WHITE, ST7735_BLACK);
 
 	unsigned char str[] = "Thank you Adafruit";
 

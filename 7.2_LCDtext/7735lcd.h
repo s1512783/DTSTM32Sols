@@ -2,6 +2,7 @@
 #define LCD7735_H_
 
 #define MADCTLGRAPHICS 0x6
+#define MADCTLTEXT 0x07
 #define MADCTLBMP 0x2
 #define ST7735_width 128
 #define ST7735_height 160

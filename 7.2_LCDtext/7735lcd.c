@@ -76,24 +76,24 @@ static const struct ST7735_cmdBuf initializers[] = {
 		// Color mode 16 bit (10.1.30)
 		{ST7735_COLMOD, 10, 1, {0x05}},
 		// Column address set 0..127
-		{ST7735_CASET, 0, 4, {0x00, 0x00, 0x00, 0x7F}},
+		{ST7735_CASET, 0, 4, {0x00, 0x02, 0x00, 0x7F}},
 		// Row address set 0..159
-		{ST7735_RASET, 0, 4, {0x00, 0x00, 0x00, 0x9F}},
+		{ST7735_RASET, 0, 4, {0x00, 0x01, 0x00, 0x9F}},
 		// GMCTRP1 Gamma correction
 		{0xE0, 0, 16, {0x02, 0x1C, 0x07, 0x12, 0x37, 0x32, 0x29, 0x2D,
-		0x29, 0x25, 0x2B, 0x39, 0x00, 0x01, 0x03, 0x10}},
-		// GMCTRP2 Gamma Polarity correction
-		{0xE1, 0, 16, {0x03, 0x1d, 0x07, 0x06, 0x2E, 0x2C, 0x29, 0x2D,
-		0x2E, 0x2E, 0x37, 0x3F, 0x00, 0x00, 0x02, 0x10}},
+				0x29, 0x25, 0x2B, 0x39, 0x00, 0x01, 0x03, 0x10}},
+				// GMCTRP2 Gamma Polarity correction
+				{0xE1, 0, 16, {0x03, 0x1d, 0x07, 0x06, 0x2E, 0x2C, 0x29, 0x2D,
+						0x2E, 0x2E, 0x37, 0x3F, 0x00, 0x00, 0x02, 0x10}},
 
-		/* ADAFRUIT HAS DISPON AND NORON SWAPPED */
+						/* ADAFRUIT HAS DISPON AND NORON SWAPPED */
 
-		// DISPON Display on
-		{0x29, 100, 0, 0},
-		// NORON Normal on
-		{0x13, 10, 0, 0},
-		// End
-		{0, 0, 0, 0}
+						// DISPON Display on
+						{0x29, 100, 0, 0},
+						// NORON Normal on
+						{0x13, 10, 0, 0},
+						// End
+						{0, 0, 0, 0}
 };
 
 
@@ -225,21 +225,30 @@ void ST7735_drawChar(uint16_t x0, uint16_t y0,
 {
 	uint8_t i, j;
 
-	ST7735_setAddrWindow(x0, y0, x0 + 6, y0 + 8, MADCTLGRAPHICS);
-
+	// For some reason the Adafruit fonts seem to be rotated 90 degrees. I fixed this by swapping all the y's and x's.
+	// This required defining a new memory access type. Not elegant, but works.
+	ST7735_setAddrWindow(y0, x0, y0 + 9, x0 + 6, MADCTLTEXT);
 	// each character is stored as 5 lines
 	for (i = 0; i < 5; i++){
 
 		uint8_t line = font[5*c + i]; // get line from font
 
-		//draw line
-		for (j=0; j < 7; j++, line >>= 1){
+
+		//draw letter
+		for (j=0; j < 8; j++, line >>= 1){
 			if(line & 0x01)
 				ST7735_pushColor(&textColor, 1);
 			else
 				ST7735_pushColor(&bgColor, 1);
 		}
+
+		ST7735_pushColor(&bgColor, 2);
+
+
+
 	}
+
+	ST7735_pushColor(&bgColor, 10);
 
 }
 
