@@ -1,21 +1,24 @@
 #include "stm32f1xx_hal.h"
 #include "7735lcd.h"
 #include "font.h"
+#include "main.h"
 
 // pin definitions
-#define LCD_PORT GPIOC
-#define LCD_PORT_BKL GPIOA
-#define GPIO_PIN_DC GPIO_PIN_2 // on port GPIOC
-#define GPIO_PIN_RST GPIO_PIN_1 // on port GPIOC
-#define GPIO_PIN_SCE GPIO_PIN_0 // on port GPIOC
-#define GPIO_PIN_BKL GPIO_PIN_1 // on port GPIOA
+#define LCD_CS_Pin GPIO_PIN_0
+#define LCD_CS_GPIO_Port GPIOC
+#define LCD_RESET_Pin GPIO_PIN_1
+#define LCD_RESET_GPIO_Port GPIOC
+#define DC_Pin GPIO_PIN_2
+#define DC_GPIO_Port GPIOC
+#define BKL_Pin GPIO_PIN_1
+#define BKL_GPIO_Port GPIOA
+#define SD_CS_Pin GPIO_PIN_6
+#define SD_CS_GPIO_Port GPIOC
 #define SPILCD &hspi2
 
 // LCD control
-#define LOW 0
-#define HIGH 1
-#define LCD_C LOW
-#define LCD_D HIGH
+#define LCD_C RESET
+#define LCD_D SET
 #define ST7735_CASET 0x2A
 #define ST7735_RASET 0x2B
 #define ST7735_MADCTL 0x36
@@ -28,6 +31,12 @@
 
 #define MADVAL(x) (((x) << 5))
 
+// SPI handles & prototypes
+SPI_HandleTypeDef hspi2;
+static void LCD_MX_GPIO_Init(void);
+static void LCD_MX_SPI2_Init(void);
+
+
 struct ST7735_cmdBuf
 {
 	uint8_t command; //ST7735 command byte
@@ -37,7 +46,7 @@ struct ST7735_cmdBuf
 };
 
 
-static const struct ST7735_cmdBuf initializers[] = {
+static struct ST7735_cmdBuf initializers[] = {
 		// SWRESET Software reset
 		{0x01, 150, 0, 0},
 		// SLPOUT Leave sleep mode
@@ -94,26 +103,27 @@ static const struct ST7735_cmdBuf initializers[] = {
 
 // low level routines
 /* LcdWrite - send 8-bit data to LCD over SPI*/
-static void LcdWrite(char dc, const char *data, int cnt)
+static void LcdWrite(char dc, uint8_t *data, int cnt)
 {
-	HAL_GPIO_WritePin(LCD_PORT, GPIO_PIN_DC, dc); // we use the DC pin to distinguish between data and control sequences
-	HAL_GPIO_WritePin(LCD_PORT, GPIO_PIN_SCE, RESET); // select LCD on SPI by pulling its pin low
+	HAL_GPIO_WritePin(DC_GPIO_Port, DC_Pin, dc); // we use the DC pin to distinguish between data and control sequences
+	HAL_GPIO_WritePin(DC_GPIO_Port, LCD_CS_Pin, RESET); // select LCD on SPI by pulling its pin low
 	HAL_SPI_TransmitReceive(SPILCD, data, 0, cnt, HAL_MAX_DELAY); // send SPI data
-	HAL_GPIO_WritePin(LCD_PORT, GPIO_PIN_SCE, SET); // disassert LCD on SPI
+	HAL_GPIO_WritePin(DC_GPIO_Port, LCD_CS_Pin, SET); // disassert LCD on SPI
 }
 
 /* LcdWrite - send 16-bit data to LCD over SPI*/
-static void LcdWrite16(char dc, const uint16_t *data, int cnt)
+static void LcdWrite16(char dc, uint16_t *data, int cnt)
 {
-	HAL_GPIO_WritePin(LCD_PORT, GPIO_PIN_DC, dc);
-	HAL_GPIO_WritePin(LCD_PORT, GPIO_PIN_SCE, RESET);
+	HAL_GPIO_WritePin(DC_GPIO_Port, DC_Pin, dc);
+	HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, RESET);
 	// change spi data size to 16 bit
-	(hspi2->Instance->CR1) |= (~(uint16_t)SPI_DATASIZE_16BIT);
-	spiReadWrite16(SPILCD, 0, data, cnt, LCDSPEED);
+	SPI_HandleTypeDef *spiPointer = SPILCD;
+	spiPointer->Instance->CR1 |= (~(uint16_t)SPI_DATASIZE_16BIT);
+	HAL_SPI_TransmitReceive(SPILCD, (uint8_t *)data, 0, cnt, HAL_MAX_DELAY); // send SPI data
 	// change spi data size back to 8 bit
-	(hspi2->Instance->CR1) &= (~(uint16_t)SPI_DATASIZE_16BIT); // clear DFF value
-	(hspi2->Instance->CR1) |= (~(uint16_t)SPI_DATASIZE_8BIT); // set it back to 8bit, I could probably get away with just zeroing it all
-	HAL_GPIO_WritePin(LCD_PORT, GPIO_PIN_SCE, SET);
+	spiPointer->Instance->CR1 &= (~(uint16_t)SPI_DATASIZE_16BIT); // clear DFF value
+	spiPointer->Instance->CR1 |= (~(uint16_t)SPI_DATASIZE_8BIT); // set it back to 8bit, I could probably get away with just zeroing it all
+	HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, SET);
 }
 
 /* ST7735_writeCmd - send a command to the ST7735 chip*/
@@ -126,15 +136,18 @@ static void ST7735_writeCmd(uint8_t c)
 /*  ST7735_init - initialise the LCD and SPI stuff */
 void ST7735_init()
 {
+	LCD_MX_GPIO_Init(); // initialise LCD GPIO
+	LCD_MX_SPI2_Init(); // initialise LCD SPI
+
 	const struct ST7735_cmdBuf *cmd;
 
 	/*Initialise SPI*/
 	/* set cs , reset low  - I've no idea why this needs to happen. Maybe we're resetting the configuration of the LCD chip?*/
-	HAL_GPIO_WritePin(LCD_PORT, GPIO_PIN_SCE, HIGH);
-	HAL_GPIO_WritePin(LCD_PORT, GPIO_PIN_RST, HIGH);
-	HAL_GPIO_WritePin(LCD_PORT, GPIO_PIN_RST, LOW);
+	HAL_GPIO_WritePin(LCD_CS_GPIO_Port, LCD_CS_Pin, SET);
+	HAL_GPIO_WritePin(LCD_RESET_GPIO_Port, LCD_RESET_Pin, SET);
+	HAL_GPIO_WritePin(LCD_RESET_GPIO_Port, LCD_RESET_Pin, RESET);
 	HAL_Delay(10);
-	HAL_GPIO_WritePin(LCD_PORT, GPIO_PIN_RST, HIGH);
+	HAL_GPIO_WritePin(LCD_RESET_GPIO_Port, LCD_RESET_Pin, SET);
 	HAL_Delay(10);
 
 	// Send initialization commands to ST7735
@@ -239,6 +252,7 @@ uint8_t ST7735_printStringRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y
 	lineLen = (x1 - x0) / CHARWIDTH;
 	noLines = (y1 - y0) / CHARHEIGHT;
 	endString = 0;
+	noWritten = 0;
 
 	for (i = 0; i < noLines; i++){
 		if (!endString){
@@ -329,7 +343,63 @@ void ST7735_drawCircle(uint16_t x0, uint16_t y0, uint16_t r, uint16_t color)
 void ST7735_backLight(uint8_t on)
 {
 	if(on)
-		HAL_GPIO_WritePin(LCD_PORT_BKL, GPIO_PIN_BKL, HIGH);
+		HAL_GPIO_WritePin(BKL_GPIO_Port, BKL_Pin, SET);
 	else
-		HAL_GPIO_WritePin(LCD_PORT_BKL, GPIO_PIN_BKL, LOW);
+		HAL_GPIO_WritePin(BKL_GPIO_Port, BKL_Pin, RESET);
+}
+
+static void LCD_MX_GPIO_Init(void)
+{
+
+	GPIO_InitTypeDef GPIO_InitStruct;
+
+	/* GPIO Ports Clock Enable */
+	__HAL_RCC_GPIOC_CLK_ENABLE();
+	__HAL_RCC_GPIOD_CLK_ENABLE();
+	__HAL_RCC_GPIOA_CLK_ENABLE();
+	__HAL_RCC_GPIOB_CLK_ENABLE();
+
+	/*Configure GPIO pin Output Level */
+	HAL_GPIO_WritePin(GPIOC, LCD_CS_Pin|LCD_RESET_Pin|DC_Pin|SD_CS_Pin, GPIO_PIN_RESET);
+
+	/*Configure GPIO pin Output Level */
+	HAL_GPIO_WritePin(BKL_GPIO_Port, BKL_Pin, GPIO_PIN_RESET);
+
+	/*Configure GPIO pins : LCD_CS_Pin LCD_RESET_Pin DC_Pin SD_CS_Pin
+                           LD4_Pin LD3_Pin */
+	GPIO_InitStruct.Pin = LCD_CS_Pin|LCD_RESET_Pin|DC_Pin|SD_CS_Pin;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+	HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+	/*Configure GPIO pin : BKL_Pin */
+	GPIO_InitStruct.Pin = BKL_Pin;
+	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+	HAL_GPIO_Init(BKL_GPIO_Port, &GPIO_InitStruct);
+
+}
+
+/* SPI2 init function */
+static void LCD_MX_SPI2_Init(void)
+{
+
+	/* SPI2 parameter configuration*/
+	hspi2.Instance = SPI2;
+	hspi2.Init.Mode = SPI_MODE_MASTER;
+	hspi2.Init.Direction = SPI_DIRECTION_2LINES;
+	hspi2.Init.DataSize = SPI_DATASIZE_8BIT;
+	hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
+	hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
+	hspi2.Init.NSS = SPI_NSS_SOFT;
+	hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256;
+	hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
+	hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
+	hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+	hspi2.Init.CRCPolynomial = 10;
+	if (HAL_SPI_Init(&hspi2) != HAL_OK)
+	{
+		_Error_Handler(__FILE__, __LINE__);
+	}
+
 }

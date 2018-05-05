@@ -29,7 +29,7 @@ void ST7735_pushColor(uint16_t *color, int cnt);
 void ST7735_fillRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1, uint16_t color);
 void ST7735_drawChar(uint16_t x0, uint16_t y0,
 		unsigned char c, uint16_t textColor, uint16_t bgColor);
-unsigned int ST7735_printString(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
+uint8_t ST7735_printStringRect(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1,
 		unsigned char *str, uint16_t textColor, uint16_t bgColor);
 void ST7735_drawVertLine(uint16_t x0, uint16_t y0,
 		uint8_t length, uint8_t thickness,  uint16_t lineColor);
