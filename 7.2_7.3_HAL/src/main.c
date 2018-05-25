@@ -39,7 +39,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stm32f1xx_hal.h"
-#include "stm32f100xb.h"
 
 /* USER CODE BEGIN Includes */
 #include "7735lcd.h"
@@ -81,8 +80,7 @@ int main(void)
 	HAL_Init();
 
 	/* USER CODE BEGIN Init */
-	ST7735_init();
-	ST7735_backLight(1);
+
 	/* USER CODE END Init */
 
 	/* Configure the system clock */
@@ -96,6 +94,8 @@ int main(void)
 
 	/* USER CODE BEGIN 2 */
 
+	ST7735_init();
+	ST7735_backLight(1);
 
 	// Test screen borders
 

@@ -1,0 +1,7 @@
+obj/ffunicode.o: ffunicode.c ff.h integer.h ffconf.h
+
+ff.h:
+
+integer.h:
+
+ffconf.h:
