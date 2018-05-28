@@ -1,6 +1,8 @@
 #ifndef LCD7735_H_
 #define LCD7735_H_
 
+//#include "stm32f1xx_hal.h"
+
 #define MADCTLGRAPHICS 0x3
 #define MADCTLTEXT 0x02
 #define MADCTLBMP 0x2

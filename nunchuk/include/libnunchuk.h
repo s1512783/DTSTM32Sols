@@ -8,16 +8,25 @@
 #ifndef LIBNUNCHUK_H_
 #define LIBNUNCHUK_H_
 
+
+
+// Calibration data for nunchuk (zero offsets)
+#define SX_OFFSET 133
+#define SY_OFFSET 123
+#define AX_OFFSET 520
+#define AY_OFFSET 470
+#define AZ_OFFSET 697
+
 // struct for holing nunchuk data
 typedef struct
 {
 	// stick X and y pos
-	uint8_t stickX;
-	uint8_t stickY;
+	int stickX;
+	int stickY;
 	// accelerometer X, Y, Z
-	uint16_t accelX;
-	uint16_t accelY;
-	uint16_t accelZ;
+	int accelX;
+	int accelY;
+	int accelZ;
 	// buttons
 	uint8_t buttonC;
 	uint8_t buttonZ;

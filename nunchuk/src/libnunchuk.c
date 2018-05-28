@@ -63,11 +63,11 @@ HAL_StatusTypeDef nunchukRead(I2C_HandleTypeDef *hi2c, nunchukTypeDef *nunchuk)
 	if(returnValue != HAL_OK)
 		return returnValue;
 
-	nunchuk->stickX = tempbuf[0];
-	nunchuk->stickY = tempbuf[1];
-	nunchuk->accelX = (tempbuf[2]<<2) | (tempbuf[5] & 0x0C) >> 2;
-	nunchuk->accelY = (tempbuf[3]<<2) | (tempbuf[5] & 0x30) >> 4;
-	nunchuk->accelZ = (tempbuf[4]<<2) | (tempbuf[5] & 0xC0) >> 6;
+	nunchuk->stickX = tempbuf[0] - SX_OFFSET;
+	nunchuk->stickY = tempbuf[1] - SY_OFFSET;
+	nunchuk->accelX = ((tempbuf[2]<<2) | (tempbuf[5] & 0x0C) >> 2) - AX_OFFSET;
+	nunchuk->accelY = ((tempbuf[3]<<2) | (tempbuf[5] & 0x30) >> 4) - AY_OFFSET;
+	nunchuk->accelZ = ((tempbuf[4]<<2) | (tempbuf[5] & 0xC0) >> 6) - AZ_OFFSET;
 	nunchuk->buttonC = ((tempbuf[5] & 0x02) ? 0 : 1);
 	nunchuk->buttonZ = ((tempbuf[5] & 0x01) ? 0 : 1);
 

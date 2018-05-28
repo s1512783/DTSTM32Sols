@@ -42,10 +42,13 @@
 
 /* USER CODE BEGIN Includes */
 #include "libnunchuk.h"
+#include "cursor.h"
 #include "7735lcd.h"
 #include <stdlib.h>
 #include <string.h>
 /* USER CODE END Includes */
+#define BUTTON_DEBOUNCE_TIME 500
+#define abs(x) (x>0 ? x : -x)
 
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
@@ -69,14 +72,8 @@ static void MX_SPI2_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_I2C1_Init(void);
 
-/* USER CODE BEGIN PFP */
-/* Private function prototypes -----------------------------------------------*/
+
 unsigned char *NunchukValString(void *, unsigned char *str);
-/* USER CODE END PFP */
-
-/* USER CODE BEGIN 0 */
-
-/* USER CODE END 0 */
 
 /**
  * @brief  The application entry point.
@@ -85,73 +82,131 @@ unsigned char *NunchukValString(void *, unsigned char *str);
  */
 int main(void)
 {
-	/* USER CODE BEGIN 1 */
 
-	/* USER CODE END 1 */
 
 	/* MCU Configuration----------------------------------------------------------*/
 
 	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+
 	HAL_Init();
-
-	/* USER CODE BEGIN Init */
-
-	/* USER CODE END Init */
 
 	/* Configure the system clock */
 	SystemClock_Config();
 
-	/* USER CODE BEGIN SysInit */
-
-	/* USER CODE END SysInit */
 
 	/* Initialize all configured peripherals */
 	MX_GPIO_Init();
 	MX_SPI2_Init();
 	MX_USART1_UART_Init();
 	MX_I2C1_Init();
-	/* USER CODE BEGIN 2 */
 
 	// Initialise devices
 	ST7735_init();
-
-	/* USER CODE END 2 */
-	unsigned char msg[] = "SX: \nSY: \nAX: \nAY: \nAZ: \nBC: \nBZ\n";
-	unsigned char msg2[6];
-
-
-
 	nStatus = nunchukInit(&hi2c1);
 	if (nStatus != HAL_OK)
 		Error_Handler();
 
+	uint32_t buttonDebounceTick = 0;
+
+
+
+
+	// Display initial message
+
+/*	unsigned char msg[] = "SX: \nSY: \nAX: \nAY: \nAZ: \nBC: \nBZ\n";
+	unsigned char msg2[6];*/
+
 	ST7735_backLight(1);
 	ST7735_fillRect(0, 0, ST7735_width, ST7735_height, ST7735_BLACK);
-	ST7735_printStringRect(0, 0, 35, 70, msg, ST7735_WHITE, ST7735_BLACK);
+	//ST7735_printStringRect(0, 0, 35, 70, msg, ST7735_WHITE, ST7735_BLACK);
 
-	HAL_Delay(1);
-	// Try stuff out
+	// Initialise cursor
+	cursor_t cursorX = cursorInit(ST7735_width/2, ST7735_height/2, 'x', ST7735_WHITE, ST7735_BLACK);
+
+	// Initialise drawing stuff
+
+	// Array of possible colors
+	uint16_t colors[] = {
+			ST7735_WHITE,
+			ST7735_BLACK,
+			ST7735_RED,
+			ST7735_BLUE,
+			ST7735_CYAN,
+			ST7735_GREEN,
+			ST7735_MAGENTA,
+			ST7735_YELLOW
+	};
+
+	// Pointer to currenly used color
+	uint16_t *colorLineCurrent = colors;
+
+	// Size of color line
+	int colorLineSize = 5;
+
+	// Display current color in left corner
+	ST7735_fillRect(0,0, 10, 10, *colorLineCurrent);
 
 
-
-
-
-	/* Infinite loop */
-	/* USER CODE BEGIN WHILE */
 	while (1)
 	{
+		// Read nunchuk data
 		nStatus = nunchukRead(&hi2c1, &nunchuk);
 		if (nStatus != HAL_OK)
 			Error_Handler();
 
+		colorLineSize = abs(nunchuk.accelZ) / 7;
 
-		ST7735_printStringRect(28, 0, 70, 10, NunchukValString((&nunchuk)->stickX, msg2), ST7735_WHITE, ST7735_BLACK);
-		ST7735_printStringRect(28, 10, 70, 20, NunchukValString((&nunchuk)->stickY, msg2), ST7735_WHITE, ST7735_BLACK);
-		ST7735_printStringRect(28, 20, 70, 30, NunchukValString((&nunchuk)->accelX, msg2), ST7735_WHITE, ST7735_BLACK);
-		ST7735_printStringRect(28, 30, 70, 40, NunchukValString((&nunchuk)->accelY, msg2), ST7735_WHITE, ST7735_BLACK);
-		ST7735_printStringRect(28, 40, 70, 50, NunchukValString((&nunchuk)->accelZ, msg2), ST7735_WHITE, ST7735_BLACK);
-		ST7735_printStringRect(28, 50, 70, 60, (nunchuk.buttonC ? "YES\n" : "NO\n"), ST7735_WHITE, ST7735_BLACK);
-		ST7735_printStringRect(28, 60, 70, 70, (nunchuk.buttonZ ? "YES\n" : "NO\n"), ST7735_WHITE, ST7735_BLACK);
+/*		if(colorLineSize == 0)
+			colorLineSize = 1;*/
+
+		// On press of button C...
+		if (nunchuk.buttonC){
+			// Check for bounce/button pressed too soon
+			if((HAL_GetTick() - buttonDebounceTick) < BUTTON_DEBOUNCE_TIME)
+				;
+			else {
+				// Increment color pointer
+				if (*colorLineCurrent != ST7735_YELLOW)
+					colorLineCurrent++;
+				else
+					colorLineCurrent = colors;
+
+				// Change displayed current color
+				ST7735_fillRect(0,0, 10, 10, *colorLineCurrent);
+				buttonDebounceTick = HAL_GetTick();
+			}
+		}
+
+		// When z is not pressed...
+		if (nunchuk.buttonZ){
+			// Clear the previous cursor position
+			/*			ST7735_fillRect(cursorX.posX, cursorX.posY,
+					cursorX.posX + colorLineSize, cursorX.posY  + colorLineSize, ST7735_BLACK);*/
+			// Draw in the position of the cursor
+			ST7735_fillRect(cursorX.posX, cursorX.posY,
+					cursorX.posX + colorLineSize, cursorX.posY  + colorLineSize, *colorLineCurrent);
+		}
+
+		// Change cursor position
+		cursorPush(&cursorX, nunchuk.stickX * STICK_SCALER + nunchuk.accelX * AX_SCALER, -(nunchuk.stickY * STICK_SCALER + nunchuk.accelY * AY_SCALER));
+//		cursorPush(&cursorX, nunchuk.stickX * STICK_SCALER, -nunchuk.stickY * STICK_SCALER);
+		cursorUpdate(&cursorX);
+
+		/*// Draw in the position of the cursor
+		ST7735_fillRect(cursorX.posX, cursorX.posY,
+				cursorX.posX + colorLineSize, cursorX.posY  + colorLineSize, *colorLineCurrent);*/
+
+
+
+		//ST7735_printStringRect(28, 0, 70, 10, NunchukValString((&nunchuk)->stickX, msg2), ST7735_WHITE, ST7735_BLACK);
+		//ST7735_printStringRect(28, 10, 70, 20, NunchukValString((&nunchuk)->stickY, msg2), ST7735_WHITE, ST7735_BLACK);
+		//ST7735_printStringRect(28, 20, 70, 30, NunchukValString((&nunchuk)->accelX, msg2), ST7735_WHITE, ST7735_BLACK);
+		//ST7735_printStringRect(28, 30, 70, 40, NunchukValString((&nunchuk)->accelY, msg2), ST7735_WHITE, ST7735_BLACK);
+
+	//	ST7735_printStringRect(28, 40, 70, 50, NunchukValString((&nunchuk)->accelZ, msg2), ST7735_WHITE, ST7735_BLACK);
+		//ST7735_printStringRect(28, 50, 70, 60, (nunchuk.buttonC ? "YES\n" : "NO\n"), ST7735_WHITE, ST7735_BLACK);
+		//ST7735_printStringRect(28, 60, 70, 70, (nunchuk.buttonZ ? "YES\n" : "NO\n"), ST7735_WHITE, ST7735_BLACK);
+
 
 		/* USER CODE END WHILE */
 
@@ -225,17 +280,6 @@ void SystemClock_Config(void)
 /* I2C1 init function */
 static void MX_I2C1_Init(void)
 {
-
-	/*hi2c1.Instance = I2C1;
-	hi2c1.Init.ClockSpeed = 1000;
-	hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
-	hi2c1.Init.OwnAddress1 = 0;
-	hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-	hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-	hi2c1.Init.OwnAddress2 = 0;
-	hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-	hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-	 */
 
 	hi2c1.Instance = I2C1;
 	hi2c1.Init.ClockSpeed = 100000;
